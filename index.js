@@ -1,70 +1,109 @@
-/**
- * This is a simple example of how you can import
- * the ollama sdk and work with that
- * import ollama from "https://esm.sh/ollama/browser"
- * add the code below to your buttons click event listener
- * const respone = await ollama.chat({messages: [{role: 'user', content: 'What is the capital of the United States?'}]});
- * console.log(response);
- */
-// ----------------------------
-/**
- * There might be another way. The platform val.town
- * allows free requests to openai api. https://www.val.town/v/std/openai
- * Limits are:
- * - Usage Quota: We limit each user to 10 requests per minute.
- * - Features: Chat completions is the only endpoint available.
- * - There is no streaming support
- *
- * This might be enough for our usecase.
- * Do make this easier @ff6347 wrote this simple wrapper class
- * that you can use to interact with val.town openai api
- * mimicing the ollama sdk.
- * It is an esm module so you need to include type="module" in your script tag
- * <script type="module" src="index.js"></script>
- */
+let isGenerating = false;
+const data = [];
+let hueSum = 0;
+let clickCount = 0;
 
-// import the wrapper class
-import { LLM } from './llm.js';
+function preload() {
+    if (llm) {
+        console.log('Yes, llm is there');
+    } else {
+        console.error('NO, llm is not there')
+    }
+}
 
-// create an instance of the class
-// you need to insert the run url for your val.town openai api
-// @ff6347 will instruct you on how to get this
+function setup() {
+    createCanvas(windowWidth, windowHeight);
 
-const llm = new LLM({
-  host: '<insert run url for your val.town openai api here>',
-});
+        const outputParagraph = document.getElementById('output');
+        const saveButton = document.getElementById('saveButton');
 
-// get the button#run element from the index.html
-const chatButton = document.getElementById('run');
+    canvas.addEventListener('click', (event) => {
+        if(clickCount < 5){
+            const hueValue = map(event.clientX, 0, windowWidth, 0, 360);
+            hueSum += hueValue;
+            clickCount++;
 
-// add a click event listener to the button that runs the async function
-chatButton.addEventListener('click', async () => {
-  // some options for the chat
-  const format = 'json'; // we want json output
-  // we set the seed so we get always the same output
-  // we set the temperature which controls the creativity of the model
-  const options = {
-    seed: 42,
-    temperature: 0.5,
-  };
-  // the messages that we want to send to the model
-  // allowed are 'system', 'assistant' and 'user' role for the messages
-  const messages = [
-    {
-      role: 'system',
-      content:
-        'You are a helpful assistant. Always repond in JSON and only JSON',
-    },
-    { role: 'user', content: 'What is the capital of the United States?' },
-  ];
+            if(clickCount === 5){
+                const averageHue = hueSum / 5;
+                outputParagraph.textContent = `Durchschnittlicher Hue-Wert: ${averageHue}`;
 
-  try {
-    // now we make the call to the api.
-    // we wrap it in a try catch block to catch any errors
-    const response = await llm.chat({ format, options, messages });
-    console.log(response);
-  } catch (error) {
-    // we had an error lets handle it
-    console.error(error);
-  }
+    isGenerating = true;
+    llm.chat({
+        format: 'json',
+        options:{
+            seed: 42,
+            temperatur: 0.8
+
+        },
+        messages: [{
+            role: 'system',
+            content: `You are a p5js color layer generator. You will get mouse positions. YOU ONLY ANSWER IN JSON. Dont give me explanations. Dont escape the JSON. Dont add new lines. 
+            
+            Please gererate circles on the hole canvas. NOT ONLY in the left upper corner. THIS IS VERY IMPORTANT TO ME! And generate 1 up to 5 datasets. IMPORTANT. Please DO NOT generate two circles on the same position. VERY IMPORTENT!  I want the dataset in the following format: 
+
+            {data:[{hue: ${averageHue}, saturation:<number between 0 and 100>, brightness:<number between 0 and 100>, x: <positive number between 0 and ${windowWidth}>, y: <positive number between 0 and ${windowHeight}> }]}`,
+
+        },
+        {
+            role: 'user',
+            content: `${averageHue}`,
+        }],
+    })
+        .then((response) => {
+            isGenerating = false;
+            console.log(response.completion.choices[0].message.content);
+            const json = JSON.parse(response.completion.choices[0].message.content);
+            data.push(...json.data);
+
+            hueSum = 0;
+            clickCount = 0;
+        })
+
+    
+        .catch((error) => {
+            isGenerating = false;
+            console.error(error);
+        });
+
+        data.push({ x: random(0, 400), y: random(0, 400) });
+
+            }
+        }
+
+        });
+
+    saveButton.addEventListener('click', () => {
+        saveCanvas('myCanvas', 'png');
+    });
+    
+}
+
+
+function draw() {
+    background(255);
+    textAlign(CENTER, CENTER);
+    colorMode(HSB, 360, 100, 100, 100);
+    noStroke();
+
+
+    if (data.length > 0) {
+
+            data.forEach(item =>{
+                
+                    for (let i = 0; i < 200; i++) {
+                        fill(item.hue % 360, item.saturation, item.brightness, 1);
+                        circle(item.x, item.y,  i*2);
+                    }
+                });
+        }
+}
+
+
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+}
+
+document.getElementById('closeButton').addEventListener('click', () => {
+    document.getElementById('welcomeModal').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
 });
